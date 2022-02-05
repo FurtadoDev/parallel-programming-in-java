@@ -110,6 +110,10 @@ public final class OneDimAveragingPhaser {
     public static void runParallelFuzzyBarrier(final int iterations,
             final double[] myNew, final double[] myVal, final int n,
             final int tasks) {
+        /**
+         * SOLUTION 1
+         */
+        /**
         Phaser ph = new Phaser(0);
         ph.bulkRegister(tasks);
 
@@ -150,5 +154,62 @@ public final class OneDimAveragingPhaser {
                 e.printStackTrace();
             }
         }
+         **/
+
+        /**
+         * SOLUTION 2
+         */
+
+
+        Phaser[] phasers = new Phaser[tasks];
+        for(int i = 0 ; i < phasers.length; i++){
+            phasers[i] = new Phaser(1);
+        }
+
+        Thread[] threads = new Thread[tasks];
+
+        for (int ii = 0; ii < tasks; ii++) {
+            final int i = ii;
+
+            threads[ii] = new Thread(() -> {
+                double[] threadPrivateMyVal = myVal;
+                double[] threadPrivateMyNew = myNew;
+
+                final int chunkSize = (n + tasks - 1) / tasks;
+                final int left = (i * chunkSize) + 1;
+                int right = (left + chunkSize) - 1;
+                if (right > n) right = n;
+
+                for (int iter = 0; iter < iterations; iter++) {
+                    threadPrivateMyNew[left] = (threadPrivateMyVal[left - 1] + threadPrivateMyVal[left + 1]) / 2.0;
+                    threadPrivateMyNew[right] = (threadPrivateMyVal[right - 1] + threadPrivateMyVal[right + 1]) / 2.0;
+                    int current_phase = phasers[i].arrive();
+                    for (int j = left+1; j <= right-1; j++) {
+                        threadPrivateMyNew[j] = (threadPrivateMyVal[j - 1] + threadPrivateMyVal[j + 1]) / 2.0;
+                    }
+                    if (i - 1 >= 0){
+                        phasers[i - 1].awaitAdvance(current_phase);
+                    }
+                    if (i + 1 < tasks){
+                        phasers[i + 1].awaitAdvance(current_phase);
+                    }
+
+
+                    double[] temp = threadPrivateMyNew;
+                    threadPrivateMyNew = threadPrivateMyVal;
+                    threadPrivateMyVal = temp;
+                }
+            });
+            threads[ii].start();
+        }
+
+        for (int ii = 0; ii < tasks; ii++) {
+            try {
+                threads[ii].join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+
     }
 }
